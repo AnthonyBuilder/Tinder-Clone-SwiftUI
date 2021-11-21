@@ -19,8 +19,8 @@ struct User: Hashable, CustomStringConvertible {
     var description: String {
         return "\(firstName), id: \(id)"
     }
-    
 }
+
 struct ContentView: View {
     
     /// List of users
@@ -33,8 +33,6 @@ struct ContentView: View {
         User(id: 5, firstName: "James", lastName: "Braun", age: 24, imageName: "person_6", occupation: "Marke"),
         User(id: 6, firstName: "Danny", lastName: "Savage", age: 25, imageName: "person_7", occupation: "Dentist"),
         User(id: 7, firstName: "Chi", lastName: "Pollack", age: 29, imageName: "person_8", occupation: "Recreation"),
-        User(id: 8, firstName: "Josue", lastName: "Strange", age: 23, imageName: "person_9", occupation: "HR Specialist"),
-        User(id: 9, firstName: "Debra", lastName: "Weber", age: 28, imageName: "person_10", occupation: "Judge")
     ]
     
     /// Return the cardVIews with for the given offset in the array
@@ -67,10 +65,18 @@ struct ContentView: View {
                     
                     ZStack {
                         ForEach(self.users, id: \.self) { user in
+                            
+                            /// Using the pattern-match operator ~=, we can determine if our
+                            /// user.id falls within the range of 6...9
                             if (maxID - 3) ... self.maxID ~= user.id {
-                                CardView()
-                                    .frame(width: getCardWidth(geometry, id: user.id), height: 400)
-                                    .offset(x: 0, y: getCardOffset(geometry, id: user.id))
+                                CardView(user: user, onRemove: { removedUser in
+                                    // Remove that user from our array
+                                    withAnimation(.interactiveSpring()) {
+                                        users.removeAll { $0.id == removedUser.id }
+                                    }
+                                })
+                                .frame(width: getCardWidth(geometry, id: user.id), height: 500)
+                                .offset(x: 0, y: getCardOffset(geometry, id: user.id))
                             }
                         }
                     }
@@ -108,36 +114,65 @@ struct CardView: View {
     
     @State private var translation: CGSize = .zero
     
+    //1
+    private var user: User
+    private var onRemove: (_ user: User) -> Void
+    
+    //2
+    private var thresholdPercentage: CGFloat = 0.5  // when the user has draged 50% the width of the screen in either direction
+    
+    //3
+    init(user: User, onRemove: @escaping (_ user: User) -> Void) {
+        self.user = user
+        self.onRemove = onRemove
+    }
+    
+    //4
+    /// What percentage of our own witdth have we swipped
+    /// - Parameters:
+    /// - geometry: The geometry
+    /// - gesture: The current gesture translation value 
+    private func getGesturePercentage(_ geometry: GeometryProxy, from gesture: DragGesture.Value) -> CGFloat {
+        gesture.translation.width / geometry.size.width
+    }
+    
     var body: some View {
         GeometryReader { geometry in
             VStack(alignment: .leading) {
-                Image("person_1")
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: geometry.size.width, height: geometry.size.height * 0.75)
-                    .clipped()
                 
-                HStack {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Debra Weber, 28")
-                            .font(.title)
-                            .bold()
-                        Text("Judge")
-                            .font(.subheadline)
-                            .bold()
-                        Text("13 Mutual Friends")
-                            .font(.subheadline)
+                //5
+                ZStack(alignment: Alignment(horizontal: .leading, vertical: .bottom)) {
+                    Image(user.imageName)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: geometry.size.width, height: geometry.size.height * 1.10)
+                        .ignoresSafeArea()
+            
+        
+                    HStack {
+                        //6
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("\(user.firstName) \(user.lastName), \(user.age)")
+                                .font(.title)
+                                .bold()
+                            Text(user.occupation)
+                                .font(.subheadline)
+                                .bold()
+                            Text("13 Mutual Friends")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        
+                        Image(systemName: "info.circle")
                             .foregroundColor(.secondary)
-                    }
-                    Spacer()
-                    
-                    Image(systemName: "info.circle")
-                        .foregroundColor(.gray)
-                }.padding(.horizontal)
+                    }.padding(.horizontal)
+                        .padding(.vertical)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
+                }
             }
             // Add padding, corner radius and shadow with blur radius
             // existing view modifier
-            .padding(.bottom)
             .background(Color.white)
             .cornerRadius(20)
             .shadow(radius: 5)
@@ -151,9 +186,17 @@ struct CardView: View {
                         }
                     }
                     .onEnded { value in
-                        withAnimation(.interactiveSpring()) {
-                            translation = .zero
-                        }
+                        
+                            if abs(getGesturePercentage(geometry, from: value)) > thresholdPercentage {
+                                withAnimation(.interactiveSpring()) {
+                                    onRemove(user)
+                                }
+                            } else {
+                                withAnimation(.interactiveSpring()) {
+                                    translation = .zero
+                                }
+                            }
+                        
                     }
             )
         }
